@@ -1,40 +1,6 @@
 ```
-/*
-Memory Layout
--------------
-
-header {
-    magic     u8[3] -- Magic bytes "SII".
-    version   u8    -- Version.
-    width     u16   -- Width in pixels (BE).
-    height    u16   -- Height in pixels (BE).
-    flags     u8    -- 0b00000001 is whether the file is compressed.
-                    -- 0b00000010 is whether the palette is included.
-                    -- 0b00000100 is whether there is transparency.
-                    -- Other bits are reserved for future updates.
-    data      u8[]  -- Indices into the palette (external or internal).
-    palette?  u32[] -- Optional palette included in the image.
-}
-
-┌─ SII Image Format ─────┐
-│ Header                 │
-│  Byte[0-2]: Magic      │
-│  Byte[3]: Version      │
-│  Byte[4-5]: Width      │
-│  Byte[6-7]: Height     │
-│  Byte[8]: Flags        │
-│    Bit 0: Compressed   │
-│    Bit 1: Palette      │
-│    Bit 2: Transparency │
-│  Bytes[9+]: Data       │
-│  Byte[n]: 0xFF         │
-│                        │
-│ Palette (optional)     │
-│  Bytes[0-3]: Color 0   │
-│  Bytes[4-7]: Color 1   │
-│   ...                  │
-│  Bytes[n*4-3]: Color n │
-└────────────────────────┘
+SII - Simple Indexed Image
+Version 0.1 - WIP
 
 Description
 -----------
@@ -48,6 +14,21 @@ channel format like RGB without alpha.
 
 Using an internal palette will increase the size depending on the
 palette.
+
+Memory Layout
+-------------
+┌─ SII Image Format ──────────────────────────────────────────────────┐
+│ magic     u8[3] -- Magic bytes "SII".                               │
+│ version   u8    -- Version.                                         │
+│ width     u16   -- Width in pixels (BE).                            │
+│ height    u16   -- Height in pixels (BE).                           │
+│ flags     u8    -- 0b00000001 is whether the file is compressed.    │
+│                 -- 0b00000010 is whether the palette is included.   │
+│                 -- 0b00000100 is whether there is transparency.     │
+│                 -- Other bits are reserved for future updates.      │
+│ data      u8[]  -- Indices into the palette (external or internal). │
+│ palette?  u32[] -- Optional palette included in the image.          │
+└─────────────────────────────────────────────────────────────────────┘
 
 Data Compression
 ----------------
@@ -69,5 +50,4 @@ as a byte array is 1-Dimensional and has no concept of rows.
 Palette Compression
 -------------------
 The palette is not compressed.
-*/
 ```
