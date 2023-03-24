@@ -1,5 +1,5 @@
 ```
-SII - Simple Indexed Image
+PIE - Pixel Indexed Encoding
 Version 0.1 - WIP
 
 Description
@@ -13,21 +13,22 @@ assuming a four channel format like RGBA, or 60% assuming a 3
 channel format like RGB without alpha.
 
 Using an internal palette will increase the size depending on the
-palette.
+palette, but still generally be smaller than other formats like PNG
+for pixel art.
 
 Memory Layout
 -------------
-┌─ SII Image Format ──────────────────────────────────────────────────┐
-│ magic     u8[3] -- Magic bytes "SII".                               │
-│ version   u8    -- Version.                                         │
-│ width     u16   -- Width in pixels (BE).                            │
-│ height    u16   -- Height in pixels (BE).                           │
-│ flags     u8    -- 0b00000001 is whether the file is compressed.    │
-│                 -- 0b00000010 is whether the palette is included.   │
-│                 -- 0b00000100 is whether there is transparency.     │
-│                 -- Other bits are reserved for future updates.      │
-│ data      u8[]  -- Indices into the palette (external or internal). │
-│ palette?  u32[] -- Optional palette included in the image.          │
+┌─ PIE Image Format ──────────────────────────────────────────────────┐
+│ magic    u8[3]     -- Magic bytes "PIE"                             │
+│ version  u8        -- Version                                       │
+│ width    u16       -- Width in pixels (BE)                          │
+│ height   u16       -- Height in pixels (BE)                         │
+│ flags    u8        -- 0b00000001 is whether the palette is included │
+│                    -- 0b00000010 is whether there is transparency   │
+│                    -- Other bits are reserved for future updates    │
+│ length   u16       -- Run count of the data section (BE)            │
+│ data     u8[]      -- Indices into palette (external or internal)   │
+│ palette? u32/u24[] -- Optional palette included in the image        │
 └─────────────────────────────────────────────────────────────────────┘
 
 Data Compression
@@ -44,7 +45,7 @@ Therefore:
 - RLE is used for horizontal runs of pixels that have the same index.
 - The vertical axis is not considered.
 
-Runs cannot be no longer than 255 pixels - runs wrap to the next row;
+Runs can be no longer than 255 pixels and they wrap to the next row
 as a byte array is 1-Dimensional and has no concept of rows.
 
 Palette Compression

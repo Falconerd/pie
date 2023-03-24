@@ -14,10 +14,10 @@ for FILE in $FILES; do
   # Get the file stem by removing the extension
   STEM=$(basename "$FILE" | cut -d'.' -f1)
 
-  # Check if there are other .sii files with the same stem
+  # Check if there are other .png files with the same stem
   OTHER_FILES=$(ls "$1/$STEM"*.png 2>/dev/null)
   if [ -n "$OTHER_FILES" ]; then
-    # Loop through each other .sii file and compare its size to the current .sii file
+    # Loop through each other .png file and compare its size to the current .sii file
     for OTHER_FILE in $OTHER_FILES; do
       if [ "$FILE" != "$OTHER_FILE" ]; then
         SIZE1=$(wc -c <"$FILE")
