@@ -4,7 +4,7 @@
 //! decode  - Decode the raw bytes of a PIE image from memory.
 //! encode  - Encode an RGBA buffer into a PIE image in memory.
 
-use std::{fs::File, io::Read, process::exit};
+use std::{fs::File, io::Read, process::exit, collections::HashMap};
 
 const FLAG_PALETTE: u8      = 1 << 0;
 const FLAG_TRANSPARENCY: u8 = 1 << 1;
@@ -62,7 +62,64 @@ pub fn encode(width: u16, height: u16, pixel_bytes: &[u8], palette: Option<&Pale
         palette: None
     };
 
-    Ok(encoded)
+    // If palette is not included, it must be created on the fly.
+    if palette.is_none() {
+    }
+
+    // 1. Chunk the Vec<u8> into RGB (3) or RGBA (4) bytes.
+    // 2. 
+}
+
+fn rle(data: &[u8]) -> Vec<u8> {
+    let mut encoded = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        let mut count = 1;
+        while i + count < data.len() && data[i] == data[i + count] && count < 255 {
+            count += 1;
+        }
+        encoded.push(count as u8);
+        encoded.push(data[i]);
+        i += count;
+    }
+    encoded
+}
+
+fn palette_from_pixels(width: u16, height: u16, pixel_bytes: &[u8]) -> Palette {
+    let mut palette = Palette {
+        format: if pixel_bytes.len() > (width * height * 3).into() { PixelFormat::RGBA } else { PixelFormat::RGB },
+        colors: Vec::new()
+    };
+
+    match palette.format {
+        PixelFormat::RGB => {
+            let mut colors = HashMap::new();
+            for (index, _) in pixel_bytes.iter().enumerate().step_by(3) {
+                let color = pixel_bytes[index] << 16 | pixel_bytes[index + 1] << 8 | pixel_bytes[index + 2];
+                if !colors.contains_key(&color) {
+                    colors.insert(color, ());
+                    palette.colors.push(pixel_bytes[index]);
+                    palette.colors.push(pixel_bytes[index + 1]);
+                    palette.colors.push(pixel_bytes[index + 2]);
+                }
+            }
+        },
+        PixelFormat::RGBA => {
+            let mut colors = HashMap::new();
+            for (index, _) in pixel_bytes.iter().enumerate().step_by(4) {
+                let color = pixel_bytes[index] << 24 | pixel_bytes[index + 1] << 16 | pixel_bytes[index + 2] << 8 | pixel_bytes[index + 3];
+                if !colors.contains_key(&color) {
+                    colors.insert(color, ());
+                    palette.colors.push(pixel_bytes[index]);
+                    palette.colors.push(pixel_bytes[index + 1]);
+                    palette.colors.push(pixel_bytes[index + 2]);
+                    palette.colors.push(pixel_bytes[index + 3]);
+                }
+            }
+        },
+    }
+
+    palette
 }
 
 /// Read a PIE file from disk and decode it into a DecodedPIE.
