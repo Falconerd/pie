@@ -1,28 +1,24 @@
 mod pie;
-use pie::PixelFormat;
+use std::{env::args, fs::File, path::PathBuf};
 
-use crate::pie::{decode, encode, Palette};
+pub use pie::{PixelFormat, DecodedPIE, EncodedPIE, Palette, read, write, encode, decode};
 
-pub fn main() {
-    // Do PIE stuff...
+use png;
+
+fn main() {
+    let args: Vec<String> = args().collect();
+    let decoder = png::Decoder::new(File::open(&args[1]).expect("Could not open PNG file"));
+    let mut reader = decoder.read_info().expect("Could not read PNG file info");
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).expect("Could not read next frame of PNG");
+    let bytes = &buf[..info.buffer_size()];
+
+    let embed_palette = args.len() > 2 && &args[2] == "-e";
+
+    let mut out_path = PathBuf::from(&args[1]);
+    out_path.set_extension("pie");
+
+    _ = pie::write(&out_path.to_owned().into_os_string().to_str().unwrap(), info.width as u16, info.height as u16, embed_palette, None, bytes.to_vec());
+    println!("wrote: {:?}", &out_path.to_owned().into_os_string().to_str().unwrap());
 }
 
-#[test]
-fn test_decode() {
-    let bytes = include_bytes!("../images/test_compressed_with_palette.sii");
-    let decoded = decode(bytes, None).unwrap();
-    decoded.pixels.iter().for_each(|x| print!("0x{:02X},", x));
-}
-
-#[test]
-fn test_encode() {
-    let pixels: Vec<u8> = vec![
-        0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xCC, 0x90, 0xFF, 0xBE, 0xEF, 0x00,
-        0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xCC, 0x90, 0xFF, 0xBE, 0xEF, 0x00,
-        0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xCC, 0x90, 0xFF, 0xBE, 0xEF, 0x00,
-        0xFF, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xCC, 0x90, 0xFF, 0xBE, 0xEF, 0x00,
-    ];
-
-    let encoded = encode(5, 4, &pixels, None);
-    println!("encoded: {:?}", encoded);
-}

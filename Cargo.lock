@@ -49,6 +49,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pie"
+version = "0.1.0"
+dependencies = [
+ "png",
+]
+
+[[package]]
 name = "png"
 version = "0.17.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -58,11 +65,4 @@ dependencies = [
  "crc32fast",
  "flate2",
  "miniz_oxide",
-]
-
-[[package]]
-name = "sii"
-version = "0.1.0"
-dependencies = [
- "png",
 ]
