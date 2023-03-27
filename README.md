@@ -1,6 +1,6 @@
 ```
 PIE - Pixel Indexed Encoding
-Version 0.1 - WIP
+Version 1.0
 
 Description
 -----------
@@ -18,18 +18,19 @@ for pixel art.
 
 Memory Layout
 -------------
-┌─ PIE Image Format ──────────────────────────────────────────────────┐
-│ magic    u8[3]     -- Magic bytes "PIE"                             │
-│ version  u8        -- Version                                       │
-│ width    u16       -- Width in pixels (BE)                          │
-│ height   u16       -- Height in pixels (BE)                         │
-│ flags    u8        -- 0b00000001 is whether the palette is included │
-│                    -- 0b00000010 is whether there is transparency   │
-│                    -- Other bits are reserved for future updates    │
-│ length   u16       -- Run count of the data section (BE)            │
-│ data     u8[]      -- Indices into palette (external or internal)   │
-│ palette? u32/u24[] -- Optional palette included in the image        │
-└─────────────────────────────────────────────────────────────────────┘
+┌─ PIE Image Format ──────────────────────────────────────────────┐
+│ magic    u8[3] -- Magic bytes "PIE"                             │
+│ version  u8    -- Version                                       │
+│ width    u16   -- Width in pixels (BE)                          │
+│ height   u16   -- Height in pixels (BE)                         │
+│ flags    u8    -- 0b00000001 is whether the palette is included │
+│                -- 0b00000010 is whether there is transparency   │
+│                -- Other bits are reserved for future updates    │
+│ length   u16   -- Run count of the data section (BE)            │
+│ data     u8[]  -- Indices into palette (external or internal)   │
+│ palette? u8[]  -- Optional palette included in the image        │
+│                -- Stride can be 3 or 4 depending on RGB/RGBA    │
+└─────────────────────────────────────────────────────────────────┘
 
 Data Compression
 ----------------
