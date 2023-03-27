@@ -21,12 +21,14 @@ In the images/ folder you will find randomly selected .png pixel art
 images from lospec.org as well as converted .pie files. If any of
 these images are your and you want it removed, please create an issue.
 
-a-strawberry-dude-509249.pie    77.00% the size of the png version
-cubikism-023391.pie             81.00% ..
-dune-portraits-787893.pie       74.00% ..
-goblin-slayer-808592.pie        63.00% ..
-khorne-berserker-509756.pie     50.00% ..
-snowfighter-844418.pie          64.00% ..
+| File | Size Difference |
+| --- | --- |
+| a-strawberry-dude-509249.pie   | 77.00% the size of the png version
+| cubikism-023391.pie            | 81.00% ..
+| dune-portraits-787893.pie      | 74.00% ..
+| goblin-slayer-808592.pie       | 63.00% ..
+| khorne-berserker-509756.pie    | 50.00% ..
+| snowfighter-844418.pie         | 64.00% ..
 
 ## Memory Layout
 
