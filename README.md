@@ -1,9 +1,8 @@
-```
-PIE - Pixel Indexed Encoding
-Version 1.0
+# PIE - Pixel Indexed Encoding
+> Version 1.0
 
-Description
------------
+## Description
+
 This lossless image format only optionally stores colors in the file.
 It is designed to be used in conjunction with a palette from which
 colours can be sampled by the decoder.
@@ -16,8 +15,8 @@ Using an internal palette will increase the size depending on the
 palette, but still generally be smaller than other formats like PNG
 for pixel art.
 
-Comparison
-----------
+## Comparison
+
 In the images/ folder you will find randomly selected .png pixel art
 images from lospec.org as well as converted .pie files. If any of
 these images are your and you want it removed, please create an issue.
@@ -29,8 +28,9 @@ goblin-slayer-808592.pie        63.00% ..
 khorne-berserker-509756.pie     50.00% ..
 snowfighter-844418.pie          64.00% ..
 
-Memory Layout
--------------
+## Memory Layout
+
+```
 ┌─ PIE Image Format ──────────────────────────────────────────────┐
 │ magic    u8[3] -- Magic bytes "PIE"                             │
 │ version  u8    -- Version                                       │
@@ -44,9 +44,10 @@ Memory Layout
 │ palette? u8[]  -- Optional palette included in the image        │
 │                -- Stride can be 3 or 4 depending on RGB/RGBA    │
 └─────────────────────────────────────────────────────────────────┘
+```
 
-Data Compression
-----------------
+## Data Compression
+
 Given this format is designed for pixel art images, some assumptions
 are made.
 
@@ -62,7 +63,6 @@ Therefore:
 Runs can be no longer than 255 pixels and they wrap to the next row
 as a byte array is 1-Dimensional and has no concept of rows.
 
-Palette Compression
--------------------
+## Palette Compression
+
 The palette is not compressed.
-```
