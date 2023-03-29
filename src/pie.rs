@@ -66,11 +66,16 @@
    The palette is not compressed.
 */
 
-//! This library provides the following functions:
-//! read    - Read a PIE file from disk and decode it.
-//! write   - Encode and write a PIE file to disk.
-//! decode  - Decode the raw bytes of a PIE image from memory.
-//! encode  - Encode an RGBA buffer into a PIE image in memory.
+//! A reference implementation for the PIE image format.
+//! This lossless image format only optionally stores colors in the file.
+//! It is designed to be used in conjunction with a palette from which
+//! colours can be sampled by the decoder.
+//! Using an external palette reduces uncompressed image size by 75%
+//! assuming a four channel format like RGBA, or 60% assuming a 3
+//! channel format like RGB without alpha.
+//! Using an internal palette will increase the size depending on the
+//! palette, but still generally be smaller than other formats like PNG
+//! for pixel art or images with limited palettes.
 use std::{fs::{File, self}, io::Read, collections::HashMap};
 
 const FLAG_PALETTE: u8      = 1 << 0;
@@ -82,6 +87,7 @@ pub enum PixelFormat {
     RGB, RGBA,
 }
 
+/// Decoded PIE file into pixel data for use in your graphics pipeline.
 #[derive(Debug, PartialEq)]
 pub struct DecodedPIE {
     pub width: u16,
@@ -90,38 +96,50 @@ pub struct DecodedPIE {
     pub pixels: Vec<u8>,
 }
 
+/// A struct encoded with the necessary data for writing. You cannot just dump this struct into a
+/// file. To write - use the [`self::write`] function.
 #[derive(Debug, PartialEq)]
 pub struct EncodedPIE {
     pub width: u16,
     pub height: u16,
     pub indices: Vec<u8>,
-    pub format: PixelFormat,
     pub palette: Option<Palette>,
 }
 
-// TODO: Use proper errors.
 #[derive(Debug, PartialEq)]
 pub enum DecodeError {
-    SWR
+    MissingPalette,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum EncodeError {
-    SWR
+    WrongPixelCount,
+    ColorNotInPalette,
 }
 
+/// Palette for embedding or keeping external. The maximum amount of colours supported is 256.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Palette {
     pub format: PixelFormat,
     pub colors: Vec<u8>, // Stride will be 4 for RGBA, 3 for RGB.
 }
 
-pub fn write(path: &str, width: u16, height: u16, embed_palette: bool, palette: Option<&Palette>, pixels: Vec<u8>) -> Result<bool, EncodeError> {
-    let encoded = encode(width, height, &pixels, embed_palette, palette).expect("Failed to encode data.");
+/// Encode and write a PIE file to disk.
+/// # Arguments
+/// * `path` - Path to the file.
+/// * `width` - Width in pixels.
+/// * `height` - Height in pixels.
+/// * `embed_palette` - If true, will embed the palette into the file.
+/// * `palette` - Optional palette to be embedded or referred to. If None, a palette will be
+///               generated on the fly and indices will match the auto-generated palette.
+/// * `pixels` - The pixel data in RGB or RGBA byte format.
+/// external palette.
+pub fn write(path: &str, width: u16, height: u16, embed_palette: bool, maybe_palette: Option<&Palette>, pixels: Vec<u8>) -> Result<bool, EncodeError> {
+    let encoded = encode(width, height, &pixels, embed_palette, maybe_palette).expect("Failed to encode data.");
     let mut flags = 0;
 
     if encoded.indices.len() / 2 > u16::MAX as usize {
-        return Err(EncodeError::SWR);
+        return Err(EncodeError::WrongPixelCount);
     }
 
     let mut bytes: Vec<u8> = vec!['P' as u8, 'I' as u8, 'E' as u8, 1];
@@ -145,26 +163,24 @@ pub fn write(path: &str, width: u16, height: u16, embed_palette: bool, palette: 
 /// Encode an array of RGB or RGBA bytes into an EncodedPIE.
 /// Note that an EncodedPIE struct is not the same format as a saved .PIE file.
 /// To get the correct format for saving, use the write function.
-pub fn encode(width: u16, height: u16, pixel_bytes: &[u8], embed_palette: bool, palette: Option<&Palette>) -> Result<EncodedPIE, EncodeError> {
+pub fn encode(width: u16, height: u16, pixel_bytes: &[u8], embed_palette: bool, maybe_palette: Option<&Palette>) -> Result<EncodedPIE, EncodeError> {
     let mut encoded = EncodedPIE {
         width, height,
         indices: Vec::new(),
-        format: PixelFormat::RGBA,
         palette: None
     };
 
 
     let mut chunk_size = 4;
     if pixel_bytes.len() == (width as usize * height as usize * 3) {
-        encoded.format = PixelFormat::RGB;
         chunk_size = 3;
     };
 
     // If palette is not included, it must be created on the fly.
-    if palette.is_none() {
+    if maybe_palette.is_none() {
         let mut indices = Vec::new();
         let mut palette = Palette {
-            format: encoded.format,
+            format: if chunk_size == 3 { PixelFormat::RGB } else { PixelFormat::RGBA },
             colors: Vec::new()
         };
         let mut map = HashMap::new();
@@ -182,8 +198,8 @@ pub fn encode(width: u16, height: u16, pixel_bytes: &[u8], embed_palette: bool, 
         if embed_palette {
             encoded.palette = Some(palette);
         }
-        encoded.indices = rle(&indices);
-    } else if let Some(palette) = palette {
+        encoded.indices = rle(&indices, 255);
+    } else if let Some(palette) = maybe_palette {
         let mut indices = Vec::new();
         let map = palette.colors.chunks(chunk_size).into_iter().enumerate().fold(HashMap::new(), |mut acc, (idx, x)| {
             acc.insert(x, idx);
@@ -191,7 +207,7 @@ pub fn encode(width: u16, height: u16, pixel_bytes: &[u8], embed_palette: bool, 
         });
         for chunk in pixel_bytes.chunks(chunk_size) {
             if !map.contains_key(chunk) {
-                return Err(EncodeError::SWR);
+                return Err(EncodeError::ColorNotInPalette);
             }
 
             indices.push(*map.get(chunk).unwrap() as u8);
@@ -199,19 +215,20 @@ pub fn encode(width: u16, height: u16, pixel_bytes: &[u8], embed_palette: bool, 
             if embed_palette {
                 encoded.palette = Some(palette.to_owned());
             }
-            encoded.indices = rle(&indices);
+            encoded.indices = rle(&indices, 255);
         }
     }
 
     Ok(encoded)
 }
 
-fn rle(data: &[u8]) -> Vec<u8> {
+/// Encode a series of u8s into runs `(count, value)` with a max of `limit`.
+pub fn rle(data: &[u8], limit: usize) -> Vec<u8> {
     let mut encoded = Vec::new();
     let mut i = 0;
     while i < data.len() {
         let mut count = 1;
-        while i + count < data.len() && data[i] == data[i + count] && count < 255 {
+        while i + count < data.len() && data[i] == data[i + count] && count < limit {
             count += 1;
         }
         encoded.push(count as u8);
@@ -235,11 +252,9 @@ pub fn read(path: &str, palette: Option<&Palette>) -> Result<DecodedPIE, DecodeE
     decode(&bytes, palette)
 }
 
-/// Decode raw bytes from PIE format into a DecodedPIE.
-/// Palette is required if not included in the data.
+/// Decode raw bytes from PIE format into a [`DecodedPIE`].
 /// * `bytes` - The raw bytes including header, index data, and optionally palette.
-/// * `palette` - An optional palette that must be included if the PIE file was saved with an
-/// external palette.
+/// * `palette` - Required if the palette is not embedded in `bytes`.
 pub fn decode(bytes: &[u8], maybe_palette: Option<&Palette>) -> Result<DecodedPIE, DecodeError> {
     let mut decoded = DecodedPIE {
         width: 0, height: 0,
@@ -277,7 +292,7 @@ pub fn decode(bytes: &[u8], maybe_palette: Option<&Palette>) -> Result<DecodedPI
         palette.format = p.format;
         palette.colors = p.colors.to_owned();
     } else {
-        return Err(DecodeError::SWR);
+        return Err(DecodeError::MissingPalette);
     }
 
     for i in (HEADER_SIZE..(HEADER_SIZE + (data_length * 2) as usize)).step_by(2) {
@@ -296,7 +311,7 @@ pub fn decode(bytes: &[u8], maybe_palette: Option<&Palette>) -> Result<DecodedPI
 
 #[test]
 fn test_decode() {
-    let bytes = include_bytes!("../images/test_compressed_with_palette.sii");
+    let bytes = include_bytes!("../images/test_embedded_palette.pie");
     let decoded = decode(bytes, None).unwrap();
     let palette_bytes: [u8; 12] = [
         0x6A, 0xBE, 0x30,
@@ -370,14 +385,14 @@ fn test_encode() {
 
 #[test]
 fn test_read() {
-    let decoded = read("images/test_compressed_with_palette.sii", None).unwrap();
+    let decoded = read("images/test_embedded_palette.pie", None).unwrap();
     let palette_bytes: [u8; 12] = [
         0x6A, 0xBE, 0x30,
         0xFF, 0xFF, 0xFF,
         0x00, 0x00, 0x00,
         0x5B, 0x6E, 0xE1,
     ];
-    let decoded_with_palette = read("images/test_compressed_with_palette.sii", Some(&Palette {
+    let decoded_with_palette = read("images/test_embedded_palette.pie", Some(&Palette {
         format: PixelFormat::RGB,
         colors: palette_bytes.to_vec(),
     })).unwrap();

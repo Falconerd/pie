@@ -5,6 +5,9 @@ pub use pie::{PixelFormat, DecodedPIE, EncodedPIE, Palette, read, write, encode,
 
 use png;
 
+/// A PNG -> PIE CLI converter. Takes one argument `-e` that is whether to embed the Palette data
+/// into the image.
+/// For custom palette ordering, you will want to create your own functions using [`encode`] and [`decode`].
 fn main() {
     let args: Vec<String> = args().collect();
     let decoder = png::Decoder::new(File::open(&args[1]).expect("Could not open PNG file"));
