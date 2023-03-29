@@ -1,10 +1,10 @@
 [package]
 name = "pie_format"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["Dylan Falconer <me@falconerd.com>"]
 description = "PIE - Pixel Indexed Encoding - image format with optional external palette, especially good for pixel art. Reference implementation and PNG -> PIE CLI."
-license = "MIT or Apache 2.0 or CC0"
+license = "MIT or Apache 2.0"
 homepage = "https://github.com/Falconerd/pie"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
