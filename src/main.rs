@@ -1,7 +1,6 @@
-mod pie;
 use std::{env::args, fs::File, path::PathBuf};
 
-pub use pie::{PixelFormat, DecodedPIE, EncodedPIE, Palette, read, write, encode, decode};
+pub use pie_format::{PixelFormat, DecodedPIE, EncodedPIE, Palette, read, write, encode, decode};
 
 use png;
 
@@ -21,7 +20,7 @@ fn main() {
     let mut out_path = PathBuf::from(&args[1]);
     out_path.set_extension("pie");
 
-    _ = pie::write(&out_path.to_owned().into_os_string().to_str().unwrap(), info.width as u16, info.height as u16, embed_palette, None, bytes.to_vec());
+    _ = pie_format::write(&out_path.to_owned().into_os_string().to_str().unwrap(), info.width as u16, info.height as u16, embed_palette, None, bytes.to_vec());
     println!("wrote: {:?}", &out_path.to_owned().into_os_string().to_str().unwrap());
 }
 

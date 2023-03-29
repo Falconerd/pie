@@ -1,6 +1,6 @@
 [package]
 name = "pie_format"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["Dylan Falconer <me@falconerd.com>"]
 description = "PIE - Pixel Indexed Encoding - image format with optional external palette, especially good for pixel art. Reference implementation and PNG -> PIE CLI."
