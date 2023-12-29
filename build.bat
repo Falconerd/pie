@@ -1,1 +1,1 @@
-cl -Zi test.c
+cl -Zi -W4 test.c

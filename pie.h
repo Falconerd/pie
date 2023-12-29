@@ -1,6 +1,6 @@
 /*
 ────────────────────────────────────────────────────────────────────────────────
-PIE - Pixel Indexed Encoding
+PIE - Palette Indexed Encoding
 Version 2.0.0
 ────────────────────────────────────────────────────────────────────────────────
 
@@ -15,19 +15,21 @@ than generalised formats like PNG when encoding pixel art images.
 If your application has a set colour palette, define the palette once and then
 store all image data without the colours. This is the ideal scenario.
 
-NOTE: width, height, length are stored in Little Endian order to make direct
+NOTE: Width, Height and Length are stored in Little Endian order to make direct
 casting possible without swapping the order.
 
 ┌─ PIE Image Format ───────────────────────────────────────────────────────────┐
 │ Name     Offset  Type     Description                                        │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ version  0       u16      Version                                            │
-│ flags    2       u16      0x1: Set if Palette is included in image data      │
+│ magic    0       u8[3]    PIE                                                │
+│ version  3       u8       Version                                            │
+│ flags    4       u32      0x1: Set if Palette is included in image data      │
 │                           0x2: Set if RGBA, otherwise RGB asumed             │
 │                           Other bits are reserved for future updates         │
-│ width    4       u16      Width in pixels                                    │
-│ height   6       u16      Height in pixels                                   │
-│ data     8       u8[][2]  Array of [Color Index, Count]                      │
+│ width    8       u16      Width in pixels                                    │
+│ height   10      u16      Height in pixels                                   │
+│ length   12      u32      Length of the data segment in bytes                │
+│ data     16      u8[][2]  Array of [Color Index, Count]                      │
 │ palette?         u8[]     Optional palette included in the image             │
 │                           Stride can be 3 or 4 depending on RGB/RGBA         │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -72,9 +74,11 @@ Changelog
 ────────────────────────────────────────────────────────────────────────────────
 
 2023-12-29: Version 2.0.0.
-    - Header values width, height, length are now stored in Little Endian order.
-      This makes the encoding and decoding process simpler on common systems.
+    - Header values Width, Height, and Length are now stored in Little Endian
+        order. This makes the encoding and decoding process simpler on common
+        systems.
     - Added a C header-only-library style reference parser.
+    - Changed the P from Pixel to Palette.
 2023-03-29: Version 1.0.1.
     - This was a change to the Rust reference parser, not the spec.
     - Fix naming collision in Rust.
@@ -111,64 +115,80 @@ typedef unsigned short pie_u16;
 typedef unsigned int pie_u32;
 #endif
 
-typedef struct {
-    pie_u32 magic;      // 4
-    pie_u16 version;    // 2
-    pie_u16 flags;      // 2
-    pie_u32 length;     // 2
-    pie_u16 width;      // 4
-    pie_u16 height;     // 2
-    void *data;         // 8
-    
-    // pie_u8 magic[3]; // 1 byte
-    // pie_u8 version; // 1 byte
-    // pie_u16 width; // 2 bytes
-    // pie_u16 height; // 2 bytes
-    // pie_u16 length; // 2 bytes
-    // int flags; // 1 byte
-    // pie_u8 *data; // 8 bytes
-} pie_header;
+#ifndef pie_size
+typedef long long pie_size;
+#endif
+
+#define PIE_IMAGE_HAS_ALPHA   1
+#define PIE_IMAGE_HAS_PALETTE 2
 
 typedef struct {
-    int has_alpha;
-    int width;
-    int height;
-    pie_u8 *pixels;
-} pie_decoded;
+    pie_u8 magic[3];       // 3
+    pie_u8 version;        // 1
+    pie_u32 flags;         // 4
+    pie_u16 width;         // 2
+    pie_u16 height;        // 2
+    pie_u32 length;        // 4
+} pie_header;              // 16
 
 typedef struct {
-    int pie_u8_size;
-    int pie_u16_size;
-    int pie_u8_correct;
-    int pie_u16_correct;
-} pie_test_typesizes;
+    pie_size count;
+    pie_size stride;
+    pie_u8 *data;
+} pie_pixels;
 
-pie_test_typesizes pie_validate_types(void) {
-    return (pie_test_typesizes){
-        .pie_u8_size = sizeof(pie_u8),
-        .pie_u16_size = sizeof(pie_u16),
-        .pie_u8_correct = sizeof(pie_u8) == 1,
-        .pie_u16_correct = sizeof(pie_u16) == 2,
-    };
+pie_header
+pie_header_from_bytes(pie_u8 *b) {
+    return *(pie_header *)b;
 }
 
-int pie_validate(pie_u8 *bytes) {
-    pie_header h = *(pie_header *)bytes;
-    // if (h.magic[0] != 'P' || h.magic[1] != 'I' || h.magic[2] != 'E') return 0;
-    if (h.version != 1 && h.version != 2) return 0;
-    if (!h.width || !h.height) return 0;
-    if (h.flags > 3) return 0;
-    if (!h.length) return 0;
-    if (!h.data) return 0;
-    return 1;
+pie_size
+pie_stride(pie_header *h) {
+    return (pie_size)3 + (h->flags & PIE_IMAGE_HAS_ALPHA);
 }
 
-/*
-    Assumed to be a valid v2 .pie file.
-    Can check with pie_validate();
-    params:
-        bytes - raw bytes read from the image file.
-*/
-int pie_decode(pie_header h) {
-    return 0;
+int
+pie_has_embedded_palette(pie_header *h) {
+    return h->flags & PIE_IMAGE_HAS_PALETTE;
+}
+
+pie_pixels
+pie_pixels_from_bytes_and_palette(pie_u8 *b, pie_u8 *p, pie_u8 *dest) {
+    pie_header *h = (pie_header *)b;
+
+    pie_u8 *data = (pie_u8 *)(h + 1);
+    pie_size stride = pie_stride(h);
+
+    pie_size pixel_count = (pie_size)h->width * (pie_size)h->height;
+    pie_size data_pairs = (pie_size)h->length / 2;
+    pie_u8 *palette_bytes = p;
+
+    pie_size pixel_index = 0;
+    for (pie_size i = 0; i < data_pairs; i += 1) {
+        pie_u8 palette_index = data[i * 2 + 0];
+        pie_u8 run_length = data[i * 2 + 1];
+
+        for (pie_u8 j = 0; j < run_length; j += 1) {
+            pie_size local_index = pixel_index * stride;
+            dest[local_index] = palette_bytes[palette_index * 3];
+            dest[local_index + 1] = palette_bytes[palette_index * 3 + 1];
+            dest[local_index + 2] = palette_bytes[palette_index * 3 + 2];
+            pixel_index += 1;
+        }
+    }
+
+    return (pie_pixels){pixel_count, stride, dest};
+}
+
+pie_pixels
+pie_pixels_from_bytes(pie_u8 *b, pie_u8 *dest) {
+    pie_header *h = (pie_header *)b;
+    if (!(h->flags & PIE_IMAGE_HAS_PALETTE)) {
+        return (pie_pixels){0};
+    }
+    pie_u8 *data = (pie_u8 *)(h + 1);
+    pie_size data_length = (pie_size)h->length;
+    pie_u8 *palette_bytes = data + data_length;
+
+    return pie_pixels_from_bytes_and_palette(b, palette_bytes, dest);
 }

@@ -1,42 +1,16 @@
-/* p
-i
-e
-flags
-width
-
-height
-
-data
-
-
-
-*/
-
-
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "pie.h"
 
-typedef unsigned long long pie_u64;
-
-typedef struct {
-    pie_u8 magic[3];
-    pie_u8 version;
-    pie_u16 flags;
-    pie_u16 padding;
-    pie_u32 width;
-    pie_u32 height;
-    void *data;
-} test_struct;
-
 pie_u8 bytes[] = {
-    0x01, 0x00, // Version
-    0x01, 0x00, // Flags (1 - palette included)
-    0x08, 0x00, // Width
-    0x08, 0x00, // Height
+    0x50, 0x49, 0x45, /* Magic "PIE" */ 0x02, /* Version */
+    0x02, 0x00, 0x00, 0x00, /* Flags (2 - palette included) */
+    0x08, 0x00, /* Width */ 0x08, 0x00, /* Height */
+    0x2E, 0x00, 0x00, 0x00, /* Data Length */
+
     // RLE encoded data [Index, Run Length]
-    // Add up the Run Lengths and it should equal Width * Height.
-    // In this case 8x8 = 64.
     0x01, 0x01,
     0x00, 0x06,
     0x01, 0x06,
@@ -60,9 +34,8 @@ pie_u8 bytes[] = {
     0x01, 0x01,
     0x03, 0x06,
     0x01, 0x02,
-    // To determine the end of this block, a running total can be kept in the
-    // decoder. When it equals the Width * Height, that's the end.
-    // Highest index is 3, so 4 colours will be assumed for the palette.
+
+    // Optional Palette.
     0x6A, 0xBE, 0x30,
     0xFF, 0xFF, 0xFF,
     0x00, 0x00, 0x00,
@@ -70,23 +43,31 @@ pie_u8 bytes[] = {
 };
 
 int main(void) {
-    pie_test_typesizes typesizes = pie_validate_types();
+    pie_header h = pie_header_from_bytes(bytes);
+    pie_size s = pie_stride(&h);
+    int ep = pie_has_embedded_palette(&h);
 
-    if (!typesizes.pie_u8_correct) {
-        printf("Expected pie_u8 size to be 1 byte. Got %d\n",
-                typesizes.pie_u8_size);
-    }
-    if (!typesizes.pie_u16_correct) {
-        printf("Expected pie_u16 size to be 2 bytes. Got %d\n",
-                typesizes.pie_u16_size);
-    }
+    assert(h.magic[0] == 'P');
+    assert(h.magic[1] == 'I');
+    assert(h.magic[2] == 'E');
+    assert(h.version == 2);
+    assert(h.flags == 0x2);
+    assert(h.width == 8);
+    assert(h.height == 8);
+    assert(h.length == 23);
+    assert(s == 3);
+    assert(ep);
 
-    int size = sizeof(test_struct);
-    printf("%d\n", size);
+    pie_u8 buffer[64 * 3] = {0};
+    pie_u8 buffer2[64 * 3] = {0};
 
-    pie_header h = *(pie_header *)bytes;
+    pie_pixels p = pie_pixels_from_bytes(bytes, buffer);
+    pie_pixels p2 = pie_pixels_from_bytes_and_palette(bytes, &bytes[62], buffer2);
+
+    int diff = memcmp(p.data, p2.data, sizeof(buffer));
+    assert(diff == 0);
 
     __debugbreak();
 
-    return 0;
+    exit(0);
 }
