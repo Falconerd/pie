@@ -155,7 +155,6 @@ pie_has_embedded_palette(pie_header *h) {
 pie_pixels
 pie_pixels_from_bytes_and_palette(pie_u8 *b, pie_u8 *p, pie_u8 *dest) {
     pie_header *h = (pie_header *)b;
-
     pie_u8 *data = (pie_u8 *)(h + 1);
     pie_size stride = pie_stride(h);
 
@@ -183,7 +182,7 @@ pie_pixels_from_bytes_and_palette(pie_u8 *b, pie_u8 *p, pie_u8 *dest) {
 pie_pixels
 pie_pixels_from_bytes(pie_u8 *b, pie_u8 *dest) {
     pie_header *h = (pie_header *)b;
-    if (!(h->flags & PIE_IMAGE_HAS_PALETTE)) {
+    if (!pie_has_embedded_palette(h)) {
         return (pie_pixels){0};
     }
     pie_u8 *data = (pie_u8 *)(h + 1);
