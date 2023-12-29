@@ -1,1 +1,5 @@
 /target
+*.ilk
+*.exe
+*.obj
+*.pdb

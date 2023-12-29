@@ -1,8 +1,8 @@
 /*
-
+────────────────────────────────────────────────────────────────────────────────
 PIE - Pixel Indexed Encoding
-----------------------------
 Version 2.0.0
+────────────────────────────────────────────────────────────────────────────────
 
 This lossless image format only optionally stores colors in the file. It is
 designed to be used in conjunction with a palette from which colours can be
@@ -18,7 +18,7 @@ store all image data without the colours. This is the ideal scenario.
 NOTE: width, height, length are stored in Little Endian order to make direct
 casting possible without swapping the order.
 
-┌─ PIE Image Format v2.0.0 ────────────────────────────────────────────────────┐
+┌─ PIE Image Format ───────────────────────────────────────────────────────────┐
 │ Name     Offset  Type          Description                                   │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ magic    0       u8[3]         Magic bytes "PIE"                             │
@@ -51,7 +51,8 @@ you would like it removed, please create an issue.
 │ Average ............................................................ -31.83% │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-## Data Compression
+Data Compression
+────────────────────────────────────────────────────────────────────────────────
 
 Given this format is designed for pixel art images, some assumptions are made.
 
@@ -60,7 +61,7 @@ Given this format is designed for pixel art images, some assumptions are made.
 
 Therefore: 
 - A Palette may contain up to 256 colours. Indices into the Palette may therfore
-  be represented by a single byte.
+    be represented by a single byte.
 - RLE is used for horizontal runs of pixels that have the same index.
 - The vertical axis is not considered.
 
@@ -69,37 +70,110 @@ array is 1-Dimensional and has no concept of rows.
 
 The palette is not compressed.
 
-## Changelog
+Changelog
+────────────────────────────────────────────────────────────────────────────────
 
 2023-12-29: Version 2.0.0.
-  - Header values width, height, length are now stored in Little Endian order.
-    This makes the encoding and decoding process simpler on common systems.
-  - Added a C header-only-library style reference parser.
+    - Header values width, height, length are now stored in Little Endian order.
+      This makes the encoding and decoding process simpler on common systems.
+    - Added a C header-only-library style reference parser.
 2023-03-29: Version 1.0.1.
-  - This was a change to the Rust reference parser, not the spec.
-  - Fix naming collision in Rust.
+    - This was a change to the Rust reference parser, not the spec.
+    - Fix naming collision in Rust.
 2023-03-29: Initial release.
+
+
+Todo
+────────────────────────────────────────────────────────────────────────────────
+    - Add a separate code-path for v1 files.
 
 */
 
+#ifndef pie_break
+#ifdef _MSC_VER
+#define pie_break() __debugbreak()
+#else
+#define pie_break() __builtin_trap()
+#endif
+#endif
+
+#ifndef pie_assert
+#define pie_assert(x) if (!(x)) pie_break();
+#endif
+
+#ifndef pie_u8
+typedef unsigned char pie_u8;
+#endif
+
+#ifndef pie_u16
+typedef unsigned short pie_u16;
+#endif
+
+#ifndef pie_u32
+typedef unsigned int pie_u32;
+#endif
+
 typedef struct {
-    pie_u8 magic[3];
-    pie_u8 version;
-    pie_u16 width;
-    pie_u16 height;
-    pie_u8 flags;
-    pie_u16 length;
-    pie_u8 *data[2];
+    pie_u32 magic;      // 4
+    pie_u16 version;    // 2
+    pie_u16 flags;      // 2
+    pie_u32 length;     // 2
+    pie_u16 width;      // 4
+    pie_u16 height;     // 2
+    void *data;         // 8
+    
+    // pie_u8 magic[3]; // 1 byte
+    // pie_u8 version; // 1 byte
+    // pie_u16 width; // 2 bytes
+    // pie_u16 height; // 2 bytes
+    // pie_u16 length; // 2 bytes
+    // int flags; // 1 byte
+    // pie_u8 *data; // 8 bytes
 } pie_header;
 
 typedef struct {
-    pie_b32 has_alpha;
-    pie_
+    int has_alpha;
+    int width;
+    int height;
     pie_u8 *pixels;
 } pie_decoded;
 
-pie_u8 *pie_decode(pie_u8 *bytes, pie_b32 *out_);
+typedef struct {
+    int pie_u8_size;
+    int pie_u16_size;
+    int pie_u8_correct;
+    int pie_u16_correct;
+} pie_test_typesizes;
 
+pie_test_typesizes pie_validate_types(void) {
+    return (pie_test_typesizes){
+        .pie_u8_size = sizeof(pie_u8),
+        .pie_u16_size = sizeof(pie_u16),
+        .pie_u8_correct = sizeof(pie_u8) == 1,
+        .pie_u16_correct = sizeof(pie_u16) == 2,
+    };
+}
+
+int pie_validate(pie_u8 *bytes) {
+    pie_header h = *(pie_header *)bytes;
+    // if (h.magic[0] != 'P' || h.magic[1] != 'I' || h.magic[2] != 'E') return 0;
+    if (h.version != 1 && h.version != 2) return 0;
+    if (!h.width || !h.height) return 0;
+    if (h.flags > 3) return 0;
+    if (!h.length) return 0;
+    if (!h.data) return 0;
+    return 1;
+}
+
+/*
+    Assumed to be a valid v2 .pie file.
+    Can check with pie_validate();
+    params:
+        bytes - raw bytes read from the image file.
+*/
+int pie_decode(pie_header h) {
+    return 0;
+}
 
 // │ magic    0       u8[3]         Magic bytes "PIE"                             │
 // │ version  3       u8            Version                                       │
