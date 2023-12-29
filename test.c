@@ -13,10 +13,6 @@ data
 */
 
 
-
-
-
-
 #include <assert.h>
 #include <stdio.h>
 #include "pie.h"
@@ -24,18 +20,18 @@ data
 typedef unsigned long long pie_u64;
 
 typedef struct {
-    pie_u8 p;
-    pie_u8 i;
-    pie_u8 e;
-    pie_u8 flags;
-    pie_u16 width;
-    pie_u16 height;
+    pie_u8 magic[3];
+    pie_u8 version;
+    pie_u16 flags;
+    pie_u16 padding;
+    pie_u32 width;
+    pie_u32 height;
     void *data;
 } test_struct;
 
 pie_u8 bytes[] = {
-    0x50, 0x49, 0x45, // PIE
-    0x01, // Flags
+    0x01, 0x00, // Version
+    0x01, 0x00, // Flags (1 - palette included)
     0x08, 0x00, // Width
     0x08, 0x00, // Height
     // RLE encoded data [Index, Run Length]
@@ -66,7 +62,6 @@ pie_u8 bytes[] = {
     0x01, 0x02,
     // To determine the end of this block, a running total can be kept in the
     // decoder. When it equals the Width * Height, that's the end.
-
     // Highest index is 3, so 4 colours will be assumed for the palette.
     0x6A, 0xBE, 0x30,
     0xFF, 0xFF, 0xFF,
@@ -76,6 +71,7 @@ pie_u8 bytes[] = {
 
 int main(void) {
     pie_test_typesizes typesizes = pie_validate_types();
+
     if (!typesizes.pie_u8_correct) {
         printf("Expected pie_u8 size to be 1 byte. Got %d\n",
                 typesizes.pie_u8_size);

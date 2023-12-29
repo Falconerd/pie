@@ -19,19 +19,17 @@ NOTE: width, height, length are stored in Little Endian order to make direct
 casting possible without swapping the order.
 
 ┌─ PIE Image Format ───────────────────────────────────────────────────────────┐
-│ Name     Offset  Type          Description                                   │
+│ Name     Offset  Type     Description                                        │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ magic    0       u8[3]         Magic bytes "PIE"                             │
-│ version  3       u8            Version                                       │
-│ width    4       u16           Width in pixels                               │
-│ height   6       u16           Height in pixels                              │
-│ flags    8       u8            0x1: Set if palette is included in image data │
-│                                0x2: Set if RGBA, otherwise RGB asumed        │
-│                                Other bits are reserved for future updates    │
-│ length   9       u16           Length of the 1st array in data section       │
-│ data     11      u8[length][2] Array of [count, color_index].                │
-│ palette?         u8[]          Optional palette included in the image        │
-│                                Stride can be 3 or 4 depending on RGB/RGBA    │
+│ version  0       u16      Version                                            │
+│ flags    2       u16      0x1: Set if Palette is included in image data      │
+│                           0x2: Set if RGBA, otherwise RGB asumed             │
+│                           Other bits are reserved for future updates         │
+│ width    4       u16      Width in pixels                                    │
+│ height   6       u16      Height in pixels                                   │
+│ data     8       u8[][2]  Array of [Color Index, Count]                      │
+│ palette?         u8[]     Optional palette included in the image             │
+│                           Stride can be 3 or 4 depending on RGB/RGBA         │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 In the images/ folder you will find randomly selected .png pixel art images from
@@ -174,15 +172,3 @@ int pie_validate(pie_u8 *bytes) {
 int pie_decode(pie_header h) {
     return 0;
 }
-
-// │ magic    0       u8[3]         Magic bytes "PIE"                             │
-// │ version  3       u8            Version                                       │
-// │ width    4       u16           Width in pixels                               │
-// │ height   6       u16           Height in pixels                              │
-// │ flags    8       u8            0x1: Set if palette is included in image data │
-// │                                0x2: Set if RGBA, otherwise RGB asumed        │
-// │                                Other bits are reserved for future updates    │
-// │ length   9       u16           Length of the 1st array in data section       │
-// │ data     11      u8[length][2] Array of [count, color_index].                │
-// │ palette?         u8[]          Optional palette included in the image        │
-// │                                Stride can be 3 or 4 depending on RGB/RGBA    │
