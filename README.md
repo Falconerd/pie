@@ -32,20 +32,24 @@ these images are your and you want it removed, please create an issue.
 
 ## Memory Layout
 
+> All integer values are stored in Little Endian order.
+
 ```
-┌─ PIE Image Format ──────────────────────────────────────────────┐
-│ magic    u8[3] -- Magic bytes "PIE"                             │
-│ version  u8    -- Version                                       │
-│ width    u16   -- Width in pixels (BE)                          │
-│ height   u16   -- Height in pixels (BE)                         │
-│ flags    u8    -- 0b00000001 is whether the palette is included │
-│                -- 0b00000010 is whether there is transparency   │
-│                -- Other bits are reserved for future updates    │
-│ length   u16   -- Run count of the data section (BE)            │
-│ data     u8[]  -- Indices into palette (external or internal)   │
-│ palette? u8[]  -- Optional palette included in the image        │
-│                -- Stride can be 3 or 4 depending on RGB/RGBA    │
-└─────────────────────────────────────────────────────────────────┘
+┌─ PIE Image Format v2.0.0 ────────────────────────────────────────────────────┐
+│ name     offset  type/size     description                                   │
+│──────────────────────────────────────────────────────────────────────────────│
+│ magic    0       u8[3]         Magic bytes "PIE"                             │
+│ version  3       u8            Version                                       │
+│ width    4       u16           Width in pixels                               │
+│ height   6       u16           Height in pixels                              │
+│ flags    8       u8            0x1: Set if palette is included in image data │
+│                                0x2: Set if RGBA, otherwise RGB asumed        │
+│                                Other bits are reserved for future updates    │
+│ length   9       u16           Length of the 1st array in data section       │
+│ data     11      u8[length][2] Array of [count, color_index].                │
+│ palette?         u8[]          Optional palette included in the image        │
+│                                Stride can be 3 or 4 depending on RGB/RGBA    │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Data Compression
@@ -68,3 +72,11 @@ as a byte array is 1-Dimensional and has no concept of rows.
 ## Palette Compression
 
 The palette is not compressed.
+
+## Changelog
+
+2023-12-29: Version 2.0.
+  - Header values width, height, length are now stored in Little Endian order.
+  This makes the encoding and decoding process simpler on common systems.
+  - Added a C header-only-library style reference parser.
+2023-03-29: Initial release.
