@@ -4,6 +4,11 @@
 #include <string.h>
 #include "pie.h"
 
+#define color_0 0x6A, 0xBE, 0x30
+#define color_1 0xFF, 0xFF, 0xFF
+#define color_2 0x00, 0x00, 0x00
+#define color_3 0x5B, 0x6E, 0xE1
+
 pie_u8 bytes[] = {
     0x50, 0x49, 0x45, /* Magic "PIE" */ 0x02, /* Version */
     0x02, 0x00, 0x00, 0x00, /* Flags (2 - palette included) */
@@ -33,13 +38,24 @@ pie_u8 bytes[] = {
     0x02, 0x01,
     0x01, 0x01,
     0x03, 0x06,
-    0x01, 0x02,
+    0x01, 0x01,
 
     // Optional Palette.
-    0x6A, 0xBE, 0x30,
-    0xFF, 0xFF, 0xFF,
-    0x00, 0x00, 0x00,
-    0x5B, 0x6E, 0xE1
+    color_0,
+    color_1,
+    color_2,
+    color_3
+};
+
+pie_u8 expected_pixel_data[] = {
+    color_1, color_0, color_0, color_0, color_0, color_0, color_0, color_1,
+    color_1, color_1, color_1, color_1, color_1, color_2, color_2, color_1,
+    color_2, color_2, color_2, color_2, color_1, color_2, color_2, color_1,
+    color_2, color_2, color_2, color_2, color_1, color_2, color_2, color_1,
+    color_1, color_1, color_1, color_1, color_1, color_2, color_2, color_1,
+    color_2, color_2, color_2, color_2, color_2, color_2, color_1, color_1,
+    color_2, color_2, color_2, color_2, color_2, color_2, color_1, color_2,
+    color_1, color_3, color_3, color_3, color_3, color_3, color_3, color_1,
 };
 
 int main(void) {
@@ -54,7 +70,7 @@ int main(void) {
     assert(h.flags == 0x2);
     assert(h.width == 8);
     assert(h.height == 8);
-    assert(h.length == 23);
+    assert(h.length == 46);
     assert(s == 3);
     assert(ep);
 
@@ -67,7 +83,12 @@ int main(void) {
     int diff = memcmp(p.data, p2.data, sizeof(buffer));
     assert(diff == 0);
 
-    __debugbreak();
+    diff = memcmp(p.data, expected_pixel_data, sizeof(buffer));
+    assert(diff == 0);
+
+    printf("All tests passed.\n");
+    printf("Press Enter to exit.\n");
+    getchar();
 
     exit(0);
 }
