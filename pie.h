@@ -28,7 +28,7 @@ casting possible without swapping the order.
 │                           Other bits are reserved for future updates         │
 │ width    8       u16      Width in pixels                                    │
 │ height   10      u16      Height in pixels                                   │
-│ length   12      u32      Length of the data segment in bytes                │
+│ length   12      u32      Length of the data segment in pairs of bytes       │
 │ data     16      u8[][2]  Array of [Color Index, Count]                      │
 │ palette?         u8[]     Optional palette included in the image             │
 │                           Stride can be 3 or 4 depending on RGB/RGBA         │
@@ -159,7 +159,7 @@ pie_pixels_from_bytes_and_palette(pie_u8 *b, pie_u8 *p, pie_u8 *dest) {
     pie_size stride = pie_stride(h);
 
     pie_size pixel_count = (pie_size)h->width * (pie_size)h->height;
-    pie_size data_pairs = (pie_size)h->length / 2;
+    pie_size data_pairs = (pie_size)h->length;
     pie_u8 *palette_bytes = p;
 
     pie_size pixel_index = 0;
@@ -186,7 +186,7 @@ pie_pixels_from_bytes(pie_u8 *b, pie_u8 *dest) {
         return (pie_pixels){0};
     }
     pie_u8 *data = (pie_u8 *)(h + 1);
-    pie_size data_length = (pie_size)h->length;
+    pie_size data_length = (pie_size)h->length * 2;
     pie_u8 *palette_bytes = data + data_length;
 
     return pie_pixels_from_bytes_and_palette(b, palette_bytes, dest);
