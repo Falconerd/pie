@@ -69,12 +69,23 @@ pie_u8 palette[] = {
 pie_u32 pie_pixel_count(pie_u8 *b) {
     pie_header *h = (pie_header *)b;
     pie_u8 *data = (pie_u8 *)(h + 1);
-    pie_size data_pairs = (pie_size)h->length;
+    pie_u32 data_pairs = (pie_u32)h->length;
     pie_u32 pixel_count = 0;
-    for (pie_size i = 0; i < data_pairs; i += 1) {
-        pixel_count += (pie_size)(data[i * 2 + 1]);
+    for (pie_u32 i = 0; i < data_pairs; i += 1) {
+        pixel_count += (pie_u32)(data[i * 2 + 1]);
     }
     return pixel_count;
+}
+
+void *test_alloc(pie_u32 s, void *c) {
+    (void)c;
+    return malloc(s);
+}
+
+void test_free(pie_u32 s, void *p, void *c) {
+    (void)s;
+    (void)c;
+    free(p);
 }
 
 int main(void) {
@@ -84,7 +95,7 @@ int main(void) {
     pie_u32 expected_pixel_count = (pie_u32)h.width * (pie_u32)h.height;
     assert(pixel_count == expected_pixel_count);
 
-    pie_size s = pie_stride(&h);
+    pie_u32 stride = pie_stride(&h);
     int ep = pie_has_embedded_palette(&h);
 
     assert(h.magic[0] == 'P');
@@ -95,19 +106,23 @@ int main(void) {
     assert(h.width == 8);
     assert(h.height == 8);
     assert(h.length == 23);
-    assert(s == 3);
+    assert(stride == 3);
     assert(ep);
 
-    pie_u8 buffer[64 * 3] = {0};
-    pie_u8 buffer2[64 * 3] = {0};
+    pie_u32 buffer_size = pixel_count * stride;
 
-    pie_pixels p = pie_pixels_from_bytes(bytes, buffer);
-    pie_pixels p2 = pie_pixels_from_bytes_and_palette(bytes, palette, buffer2);
+    pie_allocator a = {
+        .alloc = test_alloc,
+        .free = test_free
+    };
 
-    int diff = memcmp(p.data, p2.data, sizeof(buffer));
+    pie_pixels p = pie_pixels_from_bytes(bytes, a);
+    pie_pixels p2 = pie_pixels_from_bytes_and_palette(bytes, palette, a);
+
+    int diff = memcmp(p.data, p2.data, buffer_size);
     assert(diff == 0);
 
-    diff = memcmp(p.data, expected_pixel_data, sizeof(buffer));
+    diff = memcmp(p.data, expected_pixel_data, buffer_size);
     assert(diff == 0);
 
     printf("All tests passed.\n");
