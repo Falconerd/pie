@@ -15,7 +15,7 @@ than generalised formats like PNG when encoding pixel art images.
 If your application has a set colour palette, define the palette once and then
 store all image data without the colours. This is the ideal scenario.
 
-NOTE: Width, Height and Length are stored in Little Endian order to make direct
+NOTE: Width, Height and Pairs are stored in Little Endian order to make direct
 casting possible without swapping the order.
 
 ┌─ PIE Image Format ───────────────────────────────────────────────────────────┐
@@ -28,7 +28,7 @@ casting possible without swapping the order.
 │                           Other bits are reserved for future updates         │
 │ width    8       u16      Width in pixels                                    │
 │ height   10      u16      Height in pixels                                   │
-│ length   12      u32      Length of the data segment in pairs of bytes       │
+│ pairs    12      u32      Length of the data segment in pairs of bytes       │
 │ data     16      u8[][2]  Array of [Color Index, Count]                      │
 │ palette?         u8[]     Optional palette included in the image             │
 │                           Stride can be 3 or 4 depending on RGB/RGBA         │
@@ -74,7 +74,7 @@ Changelog
 ────────────────────────────────────────────────────────────────────────────────
 
 2023-12-29: Version 2.0.0.
-    - Header values Width, Height, and Length are now stored in Little Endian
+    - Header values Width, Height, and Pairs are now stored in Little Endian
         order. This makes the encoding and decoding process simpler on common
         systems.
     - Added a C header-only-library style reference parser.
@@ -122,254 +122,93 @@ typedef long long pie_size;
 #define PIE_IMAGE_HAS_ALPHA   1
 #define PIE_IMAGE_HAS_PALETTE 2
 
-typedef struct {
-    pie_u8 magic[3];       // 3
-    pie_u8 version;        // 1
-    pie_u32 flags;         // 4
-    pie_u16 width;         // 2
-    pie_u16 height;        // 2
-    pie_u32 length;        // 4
-} pie_header;              // 16
+typedef enum {
+    pie_error_none = 0,
+    pie_error_too_many_colors,
+    pie_error_too_large,
+    pie_error_not_enough_space,
+    pie_error_count
+} pie_error_type;
+
+const char *pie_errors[pie_error_count] = {
+    "",
+    "Too many colours. Max is 256.",
+    "Image is too large or there are too many orphan pixels.",
+    "Destination buffer is not large enough."
+};
 
 typedef struct {
-    void *(*alloc)(pie_size size, void *context);
-    void (*free)(pie_size size, void *ptr, void *context);
-    void *context;
-} pie_allocator;
+    pie_u8 magic[3];
+    pie_u8 version;
+    pie_u32 flags;
+    pie_u16 width;
+    pie_u16 height;
+    pie_u32 pairs;
+} pie_header;
 
 typedef struct {
-    pie_size count;
-    pie_size stride;
-    pie_u8 *data;
-    pie_allocator *a;
+    pie_error_type error;
+    pie_size size;
+    pie_u16 width;
+    pie_u16 height;
+    pie_u8 stride;
 } pie_pixels;
 
-typedef struct {
-    void *data;
-    pie_size size;
-} pie_bytes;
+pie_pixels pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
+    pie_header *h = (pie_header *)pie_bytes;
+    pie_u8 stride = 3 + (h->flags & PIE_IMAGE_HAS_ALPHA);
+    pie_size size = (pie_u32)h->width * (pie_u32)h->height * stride;
+    if (size > dest_size) {
+        return (pie_pixels){pie_error_not_enough_space};
+    }
+    pie_u8 *pair_ptr = pie_bytes + sizeof(pie_header);
+    pie_u8 *palette_ptr = pair_ptr + h->pairs * 2;
 
-pie_header
-pie_header_from_bytes(pie_u8 *b) {
-    return *(pie_header *)b;
-}
+    for (pie_size i = 0; i < h->pairs; i += 1) {
+        pie_u8 color_index = pair_ptr[i * 2];
+        pie_u8 run_length = pair_ptr[i * 2 + 1];
 
-pie_size
-pie_stride(pie_header *h) {
-    return (pie_size)3 + (h->flags & PIE_IMAGE_HAS_ALPHA);
-}
-
-int
-pie_has_embedded_palette(pie_header *h) {
-    return h->flags & PIE_IMAGE_HAS_PALETTE;
-}
-
-pie_pixels
-pie_pixels_from_bytes_and_palette(pie_u8 *b, pie_u8 *p, int flip, pie_allocator *a) {
-    pie_header *h = (pie_header *)b;
-    pie_u8 *data = (pie_u8 *)(h + 1);
-    pie_size stride = pie_stride(h);
-
-    pie_size pixel_count = (pie_size)h->width * (pie_size)h->height;
-    pie_size data_pairs = (pie_size)h->length;
-    pie_u8 *palette_bytes = p;
-
-    pie_u8 *dest = a->alloc(pixel_count * stride, a->context);
-
-    pie_size pixel_index = 0;
-    for (pie_size i = 0; i < data_pairs; i += 1) {
-        pie_u8 palette_index = data[i * 2 + 0];
-        pie_u8 run_length = data[i * 2 + 1];
-
-        for (pie_u8 j = 0; j < run_length; j += 1) {
-            pie_size local_index = pixel_index * stride;
-            for (pie_u8 k = 0; k < stride; k += 1) {
-                dest[local_index + k] = palette_bytes[palette_index * stride + k];
+        for (pie_u8 r = 0; r < run_length; r += 1) {
+            for (pie_u8 s = 0; s < stride; s += 1) {
+                *dest++ = palette_ptr[color_index * stride + s];
             }
-            pixel_index += 1;
         }
     }
 
-    // TODO: Make this happen in one pass.
-    if (flip) {
-        // for (pie_size row = 0; row < h->height / 2; row += 1) {
-        //     pie_size dest_index = pixel_count * stride - h->width * stride * (row + 1);
-        //     for (pie_size byte_index = 0; byte_index < h->width * stride; byte_index += 1) {
-        //         pie_u8 temp = dest[dest_index];
-        //         dest[dest_index++] = dest[row * h->width * stride + byte_index];
-        //         dest[row * h->width * stride + byte_index] = temp;
-        //     }
-        // }
-    }
-
-    return (pie_pixels){pixel_count, stride, dest, a};
+    return (pie_pixels){0, size, h->width, h->height, stride};
 }
 
-pie_pixels
-pie_pixels_from_bytes(pie_u8 *b, int flip, pie_allocator *a) {
-    pie_header *h = (pie_header *)b;
-    if (!pie_has_embedded_palette(h)) {
-        return (pie_pixels){0};
-    }
-    pie_u8 *data = (pie_u8 *)(h + 1);
-    pie_size data_length = (pie_size)h->length * 2;
-    pie_u8 *palette_bytes = data + data_length;
+void pie_encode(pie_u8 *pixels, pie_u16 width, pie_u16 height,
+                pie_u8 *palette, pie_u8 palette_count, pie_u8 stride,
+                pie_u8 *dest, pie_size dest_size) {
+    (void)pixels;(void)width;(void)height;
+    (void)palette;(void)palette_count;(void)stride;
+    (void)dest;(void)dest_size;
 
-    return pie_pixels_from_bytes_and_palette(b, palette_bytes, flip, a);
-}
-
-void
-pie_pixels_free(pie_pixels *pp) {
-    pp->a->free(pp->count * pp->stride, pp->data, pp->a->context);
-}
-
-pie_bytes
-pie_encode(pie_u16 width, pie_u16 height, int has_alpha, int embed_palette,
-           pie_u8 *pixels, pie_u8 *palette, pie_allocator *a) {
-
-    pie_u32 flags = embed_palette ? PIE_IMAGE_HAS_PALETTE : 0;
-            flags |= has_alpha & PIE_IMAGE_HAS_ALPHA;
+    pie_u32 flags = palette ? PIE_IMAGE_HAS_PALETTE : 0;
+            flags |= stride == 4 ? PIE_IMAGE_HAS_ALPHA : 0;
     pie_header h = {
         .magic = {'P', 'I', 'E'},
         .version = 2,
         .flags = flags,
         .width = width,
-        .height = height,
+        .height = height
     };
-    pie_size stride = pie_stride(&h);
-    pie_size pixel_count = (pie_size)h.width * (pie_size)h.height;
 
-    // Allocate enough space for 256 individual colours.
-    pie_size color_size = pixel_count * 2;
-    pie_u32 *colors = (pie_u32 *)a->alloc(color_size * 4, a->context);
-    pie_u8 *indices = (pie_u8 *)a->alloc(color_size, a->context);
-
-    // No guarantee that the memory is zeroed.
-    // TODO: Supply a memset or something.
-    for (pie_size i = 0; i < color_size; i += 1) {
-        colors[i] = 0;
-        indices[i] = 0;
-    }
-
+    pie_size pixel_count = (pie_size)width * (pie_size)height;
+    pie_size byte_count = pixel_count * stride;
+    pie_u32 colors[256] = {0};
     pie_u8 color_count = 0;
-    pie_size pair_count = 0;
+
     pie_u32 prev_color = 0;
     for (pie_size i = 0; i < pixel_count; i += 1) {
-        pie_u8 r = pixels[i * stride + 0];
-        pie_u8 g = pixels[i * stride + 1];
-        pie_u8 b = pixels[i * stride + 2];
-        pie_u32 color = r | (g << 8) | (b << 16);
-        color |= stride == 4 ? pixels[i * stride + 3] << 24 : 0;
-
-        // If colour doesn't exist, add it.
-        pie_u8 color_index = color_count;
-        for (pie_u8 j = 0; j < color_count; j += 1) {
-            if (colors[j] == color) {
-                color_index = j;
-                break;
-            }
+        pie_u32 color = *(pie_u32 *)&pixels[i * stride];
+        if (stride == 3) {
+            color &= 0xffffff00;
         }
 
-        if (color_index == color_count) {
-            colors[color_count] = color;
-            color_count += 1;
+        if (prev_color == color) {
+            
         }
-
-        indices[i] = color_index;
-
-        if (color != prev_color) {
-            pair_count += 1;
-        }
-        prev_color = color;
     }
-
-    pie_u8 *data_section = (pie_u8 *)a->alloc(pair_count * 2, a->context);
-
-    pie_size limit = 255;
-    pie_size p = 0;
-    pie_size q = 0;
-    while (p < pixel_count) {
-        pie_size count = 1;
-        while (p + count < pixel_count && indices[p] == indices[p + count]
-               && count < limit) {
-            count += 1;
-        }
-        data_section[q * 2 + 0] = indices[p];
-        data_section[q * 2 + 1] = (pie_u8)count;
-        p += count;
-        q += 1;
-    }
-
-    pie_size data_section_size = q * 2;
-    pie_size palette_size = embed_palette ? color_count * stride : 0;
-    pie_size final_size = sizeof(h) + data_section_size + palette_size;
-    pie_u8 *final = (pie_u8 *)a->alloc(final_size, a->context);
-
-    // TODO: Error codes?
-    if (q > (pie_u32)-1) {
-        return (pie_bytes){0};
-    }
-
-    h.length = (pie_u32)q;
-    *(pie_header *)final = h;
-    pie_u8 *final_data = final + sizeof(h);
-
-    for (pie_size i = 0; i < data_section_size; i += 1) {
-        *final_data++ = data_section[i];
-    }
-
-    pie_u8 *palette_section = (pie_u8 *)colors;
-
-    for (pie_size i = 0; i < palette_size; i += 1) {
-        *final_data++ = palette_section[i];
-    }
-
-    return (pie_bytes){final, final_size};
 }
-
-// pub fn rle(data: &[u8], limit: usize) -> Vec<u8> {
-//     let mut encoded = Vec::new();
-//     let mut i = 0;
-//     while i < data.len() {
-//         let mut count = 1;
-//         while i + count < data.len() && data[i] == data[i + count] && count < limit {
-//             count += 1;
-//         }
-//         encoded.push(count as u8);
-//         encoded.push(data[i]);
-//         i += count;
-//     }
-//     encoded
-// }// │ magic    0       u8[3]    PIE                                                │
-// │ version  3       u8       Version                                            │
-// │ flags    4       u32      0x1: Set if Palette is included in image data      │
-// │                           0x2: Set if RGBA, otherwise RGB asumed             │
-// │                           Other bits are reserved for future updates         │
-// │ width    8       u16      Width in pixels                                    │
-// │ height   10      u16      Height in pixels                                   │
-// │ length   12      u32      Length of the data segment in pairs of bytes       │
-// #include <stdio.h>
-
-// int main() {
-//     // Example data to write
-//     char data[] = {0x01, 0x02, 0x03, 0x04};
-//     size_t dataLength = sizeof(data);
-
-//     // Open the file in binary write mode
-//     FILE *file = fopen("output.bin", "wb");
-//     if (file == NULL) {
-//         perror("Error opening file");
-//         return 1;
-//     }
-
-//     // Write the bytes and close the file
-//     size_t written = fwrite(data, 1, dataLength, file);
-//     if(written != dataLength) {
-//         perror("Error writing to file");
-//         // Handle error
-//     }
-
-//     fclose(file);
-
-//     return 0;
-// }
