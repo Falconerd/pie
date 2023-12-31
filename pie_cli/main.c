@@ -4,12 +4,12 @@
 #include "stb_image.h"
 #include "../pie.h"
 
-void *test_alloc(pie_u32 s, void *c) {
+void *test_alloc(pie_size s, void *c) {
     (void)c;
     return malloc(s);
 }
 
-void test_free(pie_u32 s, void *p, void *c) {
+void test_free(pie_size s, void *p, void *c) {
     (void)s;
     (void)c;
     free(p);
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     int x, y, n;
     unsigned char *data = stbi_load(argv[1], &x, &y, &n, 0);
     void *buffer = malloc(x * y * n);
-    pie_bytes encoded = pie_encode(x, y, n == 4, 1, data, 0, a);
+    pie_bytes encoded = pie_encode(x, y, n == 4, 1, data, 0, &a);
 
     FILE *fp = fopen(argv[2], "wb");
     if (!fp) {
@@ -46,7 +46,6 @@ int main(int argc, char *argv[]) {
 
     fclose(fp);
 
-    __debugbreak();
     return 0;
 }
 // typedef struct {

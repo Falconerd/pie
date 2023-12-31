@@ -190,6 +190,18 @@ pie_pixels_from_bytes_and_palette(pie_u8 *b, pie_u8 *p, int flip, pie_allocator 
         }
     }
 
+    // TODO: Make this happen in one pass.
+    if (flip) {
+        // for (pie_size row = 0; row < h->height / 2; row += 1) {
+        //     pie_size dest_index = pixel_count * stride - h->width * stride * (row + 1);
+        //     for (pie_size byte_index = 0; byte_index < h->width * stride; byte_index += 1) {
+        //         pie_u8 temp = dest[dest_index];
+        //         dest[dest_index++] = dest[row * h->width * stride + byte_index];
+        //         dest[row * h->width * stride + byte_index] = temp;
+        //     }
+        // }
+    }
+
     return (pie_pixels){pixel_count, stride, dest, a};
 }
 
