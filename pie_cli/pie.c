@@ -29,8 +29,8 @@ void test_free(pie_size s, void *p, void *c) {
 size_t get_file_size(const char *filename) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
-        perror("Error opening file");
-        return -1;
+        printf("Error opening file to get size.\n");
+        return (size_t)-1;
     }
 
     fseek(file, 0, SEEK_END);
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
     }
 
     size_t original_size = get_file_size(argv[1]);
-    pie_size written; 
+    size_t written; 
     
     if (encode) {
         int x, y, n;
@@ -100,8 +100,9 @@ int main(int argc, char *argv[]) {
 
         pie_u16 w = (pie_u16)x;
         pie_u16 h = (pie_u16)y;
+        pie_u8 s = (pie_u8)n;
 
-        pie_encoded encoded = pie_encode(data, w, h, 1, n, memory, MEMORY_SIZE);
+        pie_encoded encoded = pie_encode(data, w, h, 1, s, memory, MEMORY_SIZE);
         if (encoded.error) {
             printf("%s\n", pie_errors[encoded.error]);
             return -1;
@@ -112,18 +113,19 @@ int main(int argc, char *argv[]) {
             printf("Error opening file to write.\n");
             return -1;
         }
+
         written = (pie_size)fwrite(encoded.data, 1, encoded.size, fp);
-        if (written != encoded.size) {
+        if (written != (size_t)encoded.size) {
             printf("Error writing file.\n");
             return -1;
         }
 
         fclose(fp);
     } else {
-        char *data = memory;
+        pie_u8 *data = (pie_u8 *)memory;
         size_t size = read_file_to_buffer(argv[1], data, MEMORY_SIZE);
         memory += size;
-        pie_pixels decoded = pie_decode(data, memory, MEMORY_SIZE - size);
+        pie_decoded decoded = pie_decode(data, memory, MEMORY_SIZE - size);
         if (decoded.error) {
             printf("%s\n", pie_errors[decoded.error]);
             return -1;
