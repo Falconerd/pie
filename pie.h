@@ -4,6 +4,42 @@ PIE - Palette Indexed Encoding
 Version 2.0.1
 ────────────────────────────────────────────────────────────────────────────────
 
+To use the CLI tool, compile pie_cli/pie.c or download a prebuilt binary from
+releases.
+
+Convert from some image (png, jpg, tga, ...) to .pie:
+    pie my_input_image.png my_output_image.pie
+
+Convert from .pie to .png:
+    pie my_input_image.pie my_output_image.png
+
+
+
+To use the reference encoder/decoder, just include pie.h in your project.
+
+Encode RGB/RGBA -> PIE:
+    pie_encoded pie_encode(pie_u8 *pixel_data, pie_u16 width, pie_u16 height,
+                    int embed, pie_u8 stride,
+                    pie_u8 *dest, pie_size dest_size) {
+
+    pie_encoded has this shape:
+            pie_error_type error;
+            pie_u8 *data;
+            pie_size size;
+
+Decode PIE -> RGB/RGBA:
+    pie_decoded pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size);
+
+    pie_decoded has this shape:
+        pie_error_type error;
+        pie_size size;
+        pie_u16 width;
+        pie_u16 height;
+        pie_u8 stride;
+
+In case you want to allocate the exact size to store the pixel data:
+    pie_size required = pie_required(pie_bytes);
+
 This lossless image format only optionally stores colors in the file. It is
 designed to be used in conjunction with a palette from which colours can be
 sampled by the decoder.
@@ -157,14 +193,28 @@ typedef struct {
     pie_u16 width;
     pie_u16 height;
     pie_u8 stride;
-} pie_pixels;
+} pie_decoded;
 
-pie_pixels pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
-    pie_header *h = (pie_header *)pie_bytes;
+typedef struct {
+    pie_error_type error;
+    pie_u8 *data;
+    pie_size size;
+} pie_encoded;
+
+pie_size pie_required(void *b) {
+    pie_header *h = (pie_header *)b;
+    pie_size width = (pie_size)h->width;
+    pie_size height = (pie_size)h->height;
     pie_u8 stride = 3 + (h->flags & PIE_IMAGE_HAS_ALPHA);
-    pie_size size = (pie_u32)h->width * (pie_u32)h->height * stride;
-    if (size > dest_size) {
-        return (pie_pixels){pie_error_not_enough_space};
+    return width * height * stride;
+}
+
+pie_decoded pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
+    pie_header *h = (pie_header *)pie_bytes;
+    pie_size required = pie_required(h);
+    pie_u8 stride = 3 + (h->flags & PIE_IMAGE_HAS_ALPHA);
+    if (required > dest_size) {
+        return (pie_decoded){pie_error_not_enough_space};
     }
     pie_u8 *pair_ptr = pie_bytes + sizeof(pie_header);
     pie_u8 *palette_ptr = pair_ptr + h->pairs * 2;
@@ -180,7 +230,7 @@ pie_pixels pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
         }
     }
 
-    return (pie_pixels){0, size, h->width, h->height, stride};
+    return (pie_decoded){0, required, h->width, h->height, stride};
 }
 
 #define pie_push_with_bounds_check(dest, index, max, value) { \
@@ -189,12 +239,6 @@ pie_pixels pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
     } \
     dest[index++] = value; \
 }
-
-typedef struct {
-    pie_error_type error;
-    pie_u8 *data;
-    pie_size size;
-} pie_encoded;
 
 int pie_memeql(pie_u8 *a, pie_u8 *b, pie_size n) {
     for (pie_size i = 0; i < n; i += 1) {
