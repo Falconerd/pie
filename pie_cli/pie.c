@@ -2,10 +2,13 @@
 #include <stdlib.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 #include "../pie.h"
 
 #define KB (1024ULL)
 #define MB (KB * 1024)
+#define MEMORY_SIZE (100 * MB)
 
 pie_u8 *memory;
 pie_size offset = 0;
@@ -23,7 +26,7 @@ void test_free(pie_size s, void *p, void *c) {
     (void)c;
 }
 
-long get_file_size(const char *filename) {
+size_t get_file_size(const char *filename) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
         perror("Error opening file");
@@ -31,10 +34,39 @@ long get_file_size(const char *filename) {
     }
 
     fseek(file, 0, SEEK_END);
-    long size = ftell(file);
+    size_t size = (size_t)ftell(file);
     fclose(file);
 
     return size;
+}
+
+size_t read_file_to_buffer(const char *filename, void *buf, size_t bufsize) {
+    FILE *file = fopen(filename, "rb");
+    if (file == NULL) {
+        printf("Error opening file %s\n", filename);
+        return 0;
+    }
+
+    fseek(file, 0, SEEK_END);
+    size_t size = (size_t)ftell(file);
+    if (size > bufsize) {
+        printf("Buffer too small for file %s. Need %zd got %zd.\n",
+               filename, size, bufsize);
+        return 0;
+    }
+
+    rewind(file);
+
+    size_t read_size = fread(buf, 1, size, file);
+    if (read_size != size) {
+        printf("Error reading file. Read size: %zd. size: %zd\n", read_size, size);
+        fclose(file);
+        return 0;
+    }
+
+    fclose(file);
+
+    return read_size;
 }
 
 int main(int argc, char *argv[]) {
@@ -47,46 +79,74 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    pie_allocator a = {
-        .alloc = test_alloc,
-        .free = test_free
-    };
+    memory = malloc(MEMORY_SIZE);
 
-    memory = malloc(100 * MB);
-
-    int x, y, n;
-    unsigned char *data = stbi_load(argv[1], &x, &y, &n, 0);
-    if (!data) {
-        printf("Could not load image file.");
-        return -1;
+    int encode = 1;
+    char *extension = argv[1] + strlen(argv[1]) - 4;
+    if (memcmp(extension, ".pie", 4) == 0) {
+        encode = 0;
     }
 
-    long original_size = get_file_size(argv[1]);
+    size_t original_size = get_file_size(argv[1]);
+    pie_size written; 
+    
+    if (encode) {
+        int x, y, n;
+        unsigned char *data = stbi_load(argv[1], &x, &y, &n, 0);
+        if (!data) {
+            printf("Could not load image file.");
+            return -1;
+        }
 
-    pie_bytes encoded = pie_encode((pie_u16)x, (pie_u16)y, n == 4, 1, data, &a);
-    if (encoded.error_code) {
-        printf("%s\n", pie_errors[encoded.error_code]);
-        return -1;
-    }
+        pie_u16 w = (pie_u16)x;
+        pie_u16 h = (pie_u16)y;
 
-    FILE *fp = fopen(argv[2], "wb");
-    if (!fp) {
-        printf("Error.\n");
-        return -1;
-    }
-    pie_size written = (pie_size)fwrite(encoded.data, 1, encoded.size, fp);
-    if (written != encoded.size) {
-        printf("Error.\n");
-        return -1;
-    }
+        pie_encoded encoded = pie_encode(data, w, h, 1, n, memory, MEMORY_SIZE);
+        if (encoded.error) {
+            printf("%s\n", pie_errors[encoded.error]);
+            return -1;
+        }
 
-    fclose(fp);
+        FILE *fp = fopen(argv[2], "wb");
+        if (!fp) {
+            printf("Error opening file to write.\n");
+            return -1;
+        }
+        written = (pie_size)fwrite(encoded.data, 1, encoded.size, fp);
+        if (written != encoded.size) {
+            printf("Error writing file.\n");
+            return -1;
+        }
+
+        fclose(fp);
+    } else {
+        char *data = memory;
+        size_t size = read_file_to_buffer(argv[1], data, MEMORY_SIZE);
+        memory += size;
+        pie_pixels decoded = pie_decode(data, memory, MEMORY_SIZE - size);
+        if (decoded.error) {
+            printf("%s\n", pie_errors[decoded.error]);
+            return -1;
+        }
+        int w = decoded.width;
+        int h = decoded.height;
+        int comp = 4;
+        int stride = w * comp;
+        
+        int success = stbi_write_png(argv[2], w, h, comp, memory, stride);
+        if (!success) {
+            printf("Failed to write image buffer.");
+            return -1;
+        }
+
+        written = get_file_size(argv[2]);
+    }
 
     if (written > original_size) {
-        printf("Success. But, the resulting image is larger. %ldB -> %zdB\n",
+        printf("Success. But, the resulting image is larger. %zdB -> %zdB\n",
                original_size, written);
     } else {
-        printf("Success. %ldB -> %zdB\n", original_size, written);
+        printf("Success. %zdB -> %zdB\n", original_size, written);
     }
 
     return 0;
