@@ -1,7 +1,7 @@
 /*
 ────────────────────────────────────────────────────────────────────────────────
 PIE - Palette Indexed Encoding
-Version 2.0.0
+Version 2.0.1
 ────────────────────────────────────────────────────────────────────────────────
 
 This lossless image format only optionally stores colors in the file. It is
@@ -29,14 +29,14 @@ casting possible without swapping the order.
 │ width    8       u16      Width in pixels                                    │
 │ height   10      u16      Height in pixels                                   │
 │ pairs    12      u32      Length of the data segment in pairs of bytes       │
-│ data     16      u8[][2]  Array of [Color Index, Count]                      │
+│ data     16      u8[][2]  Array of [Count, Color Index]                      │
 │ palette?         u8[]     Optional palette included in the image             │
 │                           Stride can be 3 or 4 depending on RGB/RGBA         │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 In the images/ folder you will find randomly selected .png pixel art images from
-lospec.org as well as converted .pie files. If any of these images are your and
-you would like it removed, please create an issue.
+lospec.org as well as converted .pie files. If any of these images are yours and
+you would like them removed, please create an issue.
 
 ┌─ PIE vs PNG Comparison ──────────────────────────────────────────────────────┐
 │ File                                                     PNG Size Difference │
@@ -73,6 +73,9 @@ The palette is not compressed.
 Changelog
 ────────────────────────────────────────────────────────────────────────────────
 
+2024-01-01: Version 2.0.1.
+    - Added a CLI tool to convert to and from PIE. Located in pie_cli, just
+    compile pie.c.
 2023-12-29: Version 2.0.0.
     - Header values Width, Height, and Pairs are now stored in Little Endian
         order. This makes the encoding and decoding process simpler on common
@@ -88,6 +91,8 @@ Changelog
 Todo
 ────────────────────────────────────────────────────────────────────────────────
     - Add a separate code-path for v1 files.
+    - Add support for larger palettes by increasing the byte size of data.
+        - Could retain runs of max 255 with 16535 colours.
 
 */
 
@@ -165,8 +170,8 @@ pie_pixels pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
     pie_u8 *palette_ptr = pair_ptr + h->pairs * 2;
 
     for (pie_size i = 0; i < h->pairs; i += 1) {
-        pie_u8 color_index = pair_ptr[i * 2];
-        pie_u8 run_length = pair_ptr[i * 2 + 1];
+        pie_u8 run_length = pair_ptr[i * 2];
+        pie_u8 color_index = pair_ptr[i * 2 + 1];
 
         for (pie_u8 r = 0; r < run_length; r += 1) {
             for (pie_u8 s = 0; s < stride; s += 1) {
@@ -178,37 +183,125 @@ pie_pixels pie_decode(pie_u8 *pie_bytes, pie_u8 *dest, pie_size dest_size) {
     return (pie_pixels){0, size, h->width, h->height, stride};
 }
 
-void pie_encode(pie_u8 *pixels, pie_u16 width, pie_u16 height,
-                pie_u8 *palette, pie_u8 palette_count, pie_u8 stride,
-                pie_u8 *dest, pie_size dest_size) {
-    (void)pixels;(void)width;(void)height;
-    (void)palette;(void)palette_count;(void)stride;
-    (void)dest;(void)dest_size;
+#define pie_push_with_bounds_check(dest, index, max, value) { \
+    if (index + 1 == max) { \
+            return (pie_encoded){pie_error_not_enough_space}; \
+    } \
+    dest[index++] = value; \
+}
 
-    pie_u32 flags = palette ? PIE_IMAGE_HAS_PALETTE : 0;
-            flags |= stride == 4 ? PIE_IMAGE_HAS_ALPHA : 0;
-    pie_header h = {
-        .magic = {'P', 'I', 'E'},
-        .version = 2,
-        .flags = flags,
-        .width = width,
-        .height = height
-    };
+typedef struct {
+    pie_error_type error;
+    pie_u8 *data;
+    pie_size size;
+} pie_encoded;
 
-    pie_size pixel_count = (pie_size)width * (pie_size)height;
-    pie_size byte_count = pixel_count * stride;
-    pie_u32 colors[256] = {0};
-    pie_u8 color_count = 0;
-
-    pie_u32 prev_color = 0;
-    for (pie_size i = 0; i < pixel_count; i += 1) {
-        pie_u32 color = *(pie_u32 *)&pixels[i * stride];
-        if (stride == 3) {
-            color &= 0xffffff00;
-        }
-
-        if (prev_color == color) {
-            
+int pie_memeql(pie_u8 *a, pie_u8 *b, pie_size n) {
+    for (pie_size i = 0; i < n; i += 1) {
+        if (a[i] != b[i]) {
+            return 0;
         }
     }
+    return 1;
+}
+
+void pie_memcpy(pie_u8 *dest, pie_u8 *src, pie_size bytes) {
+    for (pie_size i = 0; i < bytes; i += 1) {
+        dest[i] = src[i];
+    }
+}
+
+pie_u8 pie_get_color_index(pie_u8 *current_color, pie_u8 *color_data,
+                           pie_u8 color_count, pie_u8 stride) {
+    for (pie_u8 j = 0; j < color_count; j++) {
+        if (pie_memeql(&color_data[j * stride], current_color, stride)) {
+            return j;
+        }
+    }
+    return color_count;
+}
+
+pie_encoded pie_encode(pie_u8 *pixel_data, pie_u16 width, pie_u16 height,
+                int embed, pie_u8 stride,
+                pie_u8 *dest, pie_size dest_size) {
+
+    pie_u32 flags = embed ? PIE_IMAGE_HAS_PALETTE : 0;
+            flags |= stride == 4 ? PIE_IMAGE_HAS_ALPHA : 0;
+    pie_header *h = (pie_header *)dest;
+    h->magic[0] = 'P';
+    h->magic[1] = 'I';
+    h->magic[2] = 'E';
+    h->version = 2;
+    h->flags = flags;
+    h->width = width;
+    h->height = height;
+    h->pairs = 0;
+
+    pie_size header_size = sizeof(pie_header);
+    pie_size bytes_used = header_size;
+
+    pie_size pixel_count = (pie_size)width * (pie_size)height;
+    pie_u8 color_data[256 * 4] = {0};
+    pie_u8 limit = 255;
+    pie_u8 run_length_limit = 255;
+    pie_u8 color_count = 1;
+
+    pie_u8 run_length = 1;
+    pie_u8 *current_color = &pixel_data[0];
+    pie_memcpy(&color_data[0], current_color, stride);
+    for (pie_size i = stride; i < pixel_count * stride; i += stride) {
+        int eql = pie_memeql(&pixel_data[i], current_color, stride);
+        if (eql && run_length < run_length_limit - 1) {
+            run_length += 1;
+        } else {
+            // Find colour index.
+            pie_u8 color_index = pie_get_color_index(current_color, color_data,
+                                                     color_count, stride);
+
+            // If colour doesn't exist, add it.
+            if (color_index == color_count) {
+                if (color_count == limit) {
+                    return (pie_encoded){pie_error_too_many_colors};
+                }
+
+                pie_size offset = color_count * stride;
+                pie_memcpy(&color_data[offset], current_color, stride);
+                color_count += 1;
+            }
+
+            pie_push_with_bounds_check(dest, bytes_used, dest_size, run_length);
+            pie_push_with_bounds_check(dest, bytes_used, dest_size, color_index);
+            h->pairs += 1;
+            current_color = &pixel_data[i];
+            run_length = 1;
+        }
+    }
+
+    pie_u8 color_index = pie_get_color_index(current_color, color_data,
+                                                     color_count, stride);
+    // If colour doesn't exist, add it.
+    if (color_index == color_count) {
+        if (color_count == limit) {
+            return (pie_encoded){pie_error_too_many_colors};
+        }
+
+        pie_memcpy(&color_data[color_count * stride], current_color, stride);
+        color_count += 1;
+    }
+    
+    pie_push_with_bounds_check(dest, bytes_used, dest_size, run_length);
+    pie_push_with_bounds_check(dest, bytes_used, dest_size, color_index);
+    h->pairs += 1;
+
+    if (embed) {
+        for (pie_size i = 0; i < color_count; i += 1) {
+            pie_u8 *color_ptr = (pie_u8 *)&color_data[i * stride];
+            for (pie_u8 s = 0; s < stride; s += 1) {
+                pie_u8 v = *(color_ptr + s);
+                pie_push_with_bounds_check(dest, bytes_used, dest_size, v);
+            }
+        }
+    }
+
+    return (pie_encoded){0, dest, bytes_used};
 }
